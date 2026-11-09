@@ -111,7 +111,10 @@ func buildSingBoxConfig(inbounds []*nativeInbound, tunnels []*Tunnel) (map[strin
 	live := map[string]bool{}
 	// direct 强制 IPv4：隧道内没有 IPv6，母机有全局 IPv6 时
 	// 没匹配上规则的流量会从 IPv6 出去，暴露服务器真实地址。
-	outs := []any{map[string]any{"type": "direct", "tag": "direct", "domain_strategy": "ipv4_only"}}
+	// 注意：出站上的 domain_strategy 是旧写法，sing-box 1.12 已废弃、
+	// 1.14 已移除，改用 domain_resolver + 一个 local DNS 服务器
+	// （见 https://sing-box.sagernet.org/migration/#migrate-domain-strategy-options）。
+	outs := []any{map[string]any{"type": "direct", "tag": "direct", "domain_resolver": map[string]any{"server": "local", "strategy": "ipv4_only"}}}
 	for _, tunnel := range tunnels {
 		if tunnel.Status != "up" {
 			continue
@@ -265,7 +268,7 @@ func buildSingBoxConfig(inbounds []*nativeInbound, tunnels []*Tunnel) (map[strin
 			rules = append(rules, rule)
 		}
 	}
-	return map[string]any{"log": map[string]any{"level": "warn"}, "inbounds": ins, "outbounds": outs, "route": map[string]any{"rules": rules, "final": "direct"}}, nil
+	return map[string]any{"log": map[string]any{"level": "warn"}, "dns": map[string]any{"servers": []any{map[string]any{"type": "local", "tag": "local"}}}, "inbounds": ins, "outbounds": outs, "route": map[string]any{"rules": rules, "final": "direct"}}, nil
 }
 
 func (p *coreProc) kind() string {

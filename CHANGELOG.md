@@ -1,5 +1,9 @@
 # 更新记录
 
+## v0.3.1 — 修复 sing-box 配置校验失败
+
+- v0.3.0 给 direct 出站加的 `domain_strategy: ipv4_only` 是旧写法，sing-box 1.12 已废弃、1.14 已移除，导致 `sing-box check` 直接报错、配置无法应用。改用官方迁移方案：`domain_resolver` + 一个 local DNS 服务器，direct 出站照常强制 IPv4。已用真实 sing-box 1.14.3 校验通过。
+
 ## v0.3.0 — 自建核心只剩 sing-box
 
 - 移除自建 Xray 核心：不再下载、不再运行 Xray，一键配置直接走 sing-box；旧安装升级后自动切到 sing-box，已有 VLESS/Trojan/Hysteria2/TUIC 入站照常工作。

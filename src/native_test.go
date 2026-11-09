@@ -65,13 +65,27 @@ func TestBuildSingBoxConfigForcesIPv4OnDirect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// domain_resolver 需要一个 local DNS 服务器
+	dns, ok := cfg["dns"].(map[string]any)
+	if !ok {
+		t.Fatal("缺少 dns 配置")
+	}
+	servers, ok := dns["servers"].([]any)
+	if !ok || len(servers) != 1 {
+		t.Fatalf("应有一个 local DNS 服务器，实际 %v", dns["servers"])
+	}
+	server := servers[0].(map[string]any)
+	if server["type"] != "local" || server["tag"] != "local" {
+		t.Errorf("local DNS 服务器不对: %v", server)
+	}
 	for _, o := range cfg["outbounds"].([]any) {
 		m := o.(map[string]any)
 		if m["tag"] != "direct" {
 			continue
 		}
-		if m["domain_strategy"] != "ipv4_only" {
-			t.Errorf("direct 出站应强制 IPv4，实际 %v", m["domain_strategy"])
+		resolver, ok := m["domain_resolver"].(map[string]any)
+		if !ok || resolver["server"] != "local" || resolver["strategy"] != "ipv4_only" {
+			t.Errorf("direct 出站应经 local DNS 强制 IPv4，实际 %v", m["domain_resolver"])
 		}
 		return
 	}
