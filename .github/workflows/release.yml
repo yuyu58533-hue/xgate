@@ -1,0 +1,163 @@
+name: Release
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            compat/miku-export/go.sum
+      - name: Resolve stable version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(cat VERSION)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            [[ "${GITHUB_REF#refs/tags/}" == "v$version" ]]
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Check shell and Python syntax
+        run: |
+          for script in install.sh install-online.sh install-docker.sh mikugate.sh scripts/miku.sh scripts/test-docker-smoke.sh docker/*.sh; do bash -n "$script"; done
+          python3 -m compileall -q scripts docker
+      - name: Offline Go regression tests and vet
+        run: |
+          go test -race -c -o /tmp/miku-gate-tests ./src
+          sudo /tmp/miku-gate-tests -test.count=1 -test.timeout=5m
+          go vet ./...
+          (cd compat/miku-export && go test ./... && go vet ./...)
+      - name: Offline installer regression tests
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends nginx
+          cd scripts
+          sudo env MIKU_NGINX=/usr/sbin/nginx python3 -B -m unittest -v test_maintenance test_bootstrap test_quick test_ports test_docker test_frontend test_frontend_lifecycle test_build_key
+      - name: Check Go formatting
+        run: test -z "$(gofmt -l src)"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: DOM interaction regression tests
+        run: |
+          npm install --prefix "$RUNNER_TEMP/miku-ui" --ignore-scripts --no-audit --no-fund jsdom@26.1.0
+          MIKU_UI_OUTPUT="$RUNNER_TEMP/miku-ui-fixture" go test ./src -run '^TestPanelBrowserFixture$' -count=1
+          MIKU_JSDOM_MODULE="$RUNNER_TEMP/miku-ui/node_modules/jsdom" node scripts/test-ui.cjs "$RUNNER_TEMP/miku-ui-fixture/index.html"
+          python3 -B scripts/export-frontend.py
+          MIKU_JSDOM_MODULE="$RUNNER_TEMP/miku-ui/node_modules/jsdom" node scripts/test-ui.cjs frontend/public/index.html
+      - name: Build both architectures from source
+        run: python3 scripts/build-release.py --version '${{ steps.version.outputs.version }}' --label 'v${{ steps.version.outputs.version }}' --output dist
+      - name: Verify release archives and embedded version
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum -c SHA256SUMS)
+          bash dist/miku --verify
+          mkdir -m 700 smoke
+          tar --no-same-owner -xzf "dist/miku-gate-vps-v${{ steps.version.outputs.version }}.tar.gz" -C smoke
+          [[ "$(smoke/miku-gate/bin/miku-linux-amd64 -version)" == 'Miku Gate ${{ steps.version.outputs.version }}' ]]
+          python3 -m zipfile -t "dist/miku-gate-v${{ steps.version.outputs.version }}.zip"
+      - name: Docker build, startup and persistent credentials smoke test
+        shell: bash
+        working-directory: smoke/miku-gate
+        run: |
+          set -euo pipefail
+          [[ -c /dev/net/tun ]] || sudo modprobe tun
+          docker compose config --quiet
+          bash install-docker.sh build
+          trap 'docker compose logs --tail=80 miku; docker compose -f compose.frontend.yaml down; docker compose down; kill "$busy_ports_pid" 2>/dev/null || true' EXIT
+          # Both default ports are intentionally busy: startup must auto-fallback.
+          python3 -u -c 'import socket,time; holders=[]; [(holders.append(socket.socket()), holders[-1].bind(("0.0.0.0", port)), holders[-1].listen()) for port in (8899,8900)]; print("ports held",flush=True); time.sleep(900)' > "$RUNNER_TEMP/miku-busy-ports.log" 2>&1 &
+          busy_ports_pid=$!
+          sleep 1
+          kill -0 "$busy_ports_pid"
+          # Backend bootstrap creates root-owned private bind directories; do
+          # not create them as the ordinary GitHub runner user.
+          backend_info=$(sudo bash install-docker.sh backend up)
+          [[ "$backend_info" == *'复用本地镜像'* ]]
+          unset backend_info
+          [[ "$(stat -c %u docker-data)" == 0 ]]
+          [[ "$(stat -c %a docker-data)" == 700 ]]
+          docker compose exec -T miku miku status
+          before=$(docker compose exec -T miku sha256sum /var/lib/miku/password /var/lib/miku/basepath)
+          docker compose stop miku
+          docker compose up -d --force-recreate --wait --wait-timeout 180
+          after=$(docker compose exec -T miku sha256sum /var/lib/miku/password /var/lib/miku/basepath)
+          [[ "$before" == "$after" ]]
+          sudo python3 -B scripts/frontend.py start
+          base=$(sudo cat docker-data/basepath)
+          port=$(sudo python3 -c 'import json; print(json.load(open("frontend/.runtime/state.json"))["port"])')
+          backend_port=$(sudo python3 -c 'import json; print(json.load(open("docker-data/settings.json"))["port"])')
+          [[ "$port" != 8900 && "$port" != 8899 && "$port" != "$backend_port" ]]
+          [[ "$backend_port" != 8899 && "$backend_port" != 8900 ]]
+          frontend="http://127.0.0.1:$port/$base/"
+          curl -fsS "$frontend" -o "$RUNNER_TEMP/frontend-login.html"
+          grep -q 'static/login-2.js' "$RUNNER_TEMP/frontend-login.html"
+          [[ "$(curl -s -o /dev/null -w '%{http_code}' "${frontend}api/jobs")" == 401 ]]
+          password=$(sudo cat docker-data/password)
+          printf '%s' "$password" | curl -fsS -c "$RUNNER_TEMP/frontend.cookies" --data-urlencode password@- "${frontend}login"
+          unset password
+          curl -fsS -b "$RUNNER_TEMP/frontend.cookies" "$frontend" -o "$RUNNER_TEMP/frontend-index.html"
+          grep -q 'static/index-2.js' "$RUNNER_TEMP/frontend-index.html"
+          curl -fsS -b "$RUNNER_TEMP/frontend.cookies" "${frontend}api/jobs" -o "$RUNNER_TEMP/frontend-jobs.json"
+          python3 -c 'import json,sys; assert isinstance(json.load(open(sys.argv[1])), list)' "$RUNNER_TEMP/frontend-jobs.json"
+          [[ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Origin: https://untrusted.example' -X POST "${frontend}login")" == 403 ]]
+          config_before=$(sudo sha256sum frontend/.runtime/nginx.conf)
+          sudo python3 -B scripts/frontend.py start
+          [[ "$config_before" == "$(sudo sha256sum frontend/.runtime/nginx.conf)" ]]
+          sudo python3 -B scripts/frontend.py stop
+          docker compose exec -T miku miku status
+          curl -fsS -b "$RUNNER_TEMP/frontend.cookies" "http://127.0.0.1:$backend_port/$base/api/jobs" -o /dev/null
+          sudo python3 -B scripts/frontend.py start
+          sudo python3 -B scripts/frontend.py info
+      - uses: actions/upload-artifact@v4
+        with:
+          name: miku-gate-release
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: miku-gate-release
+          path: dist
+      - name: Create draft, upload and verify attachments, then publish stable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF#refs/tags/}"
+          (cd dist && sha256sum -c SHA256SUMS)
+          if gh release view "$tag" --json isDraft --jq .isDraft > draft-state; then
+            [[ "$(cat draft-state)" == true ]] || { echo 'Refusing to overwrite a published release'; exit 1; }
+          else
+            gh release create "$tag" --verify-tag --draft --title "Miku Gate $tag" --notes-file scripts/release-notes.md
+          fi
+          gh release upload "$tag" dist/* --clobber
+          mkdir verify
+          gh release download "$tag" --dir verify --pattern '*'
+          (cd verify && sha256sum -c SHA256SUMS)
+          [[ "$(find verify -maxdepth 1 -type f | wc -l)" -eq 6 ]]
+          gh release edit "$tag" --draft=false --prerelease=false --latest --title "Miku Gate $tag" --notes-file scripts/release-notes.md

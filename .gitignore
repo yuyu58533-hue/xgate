@@ -1,0 +1,13 @@
+fanout
+*.tar.gz
+*.log
+bin/
+dist/
+*.zip
+__pycache__/
+*.pyc
+.env
+docker-data/
+docker-certs/
+docker-backups/
+frontend/.runtime/
