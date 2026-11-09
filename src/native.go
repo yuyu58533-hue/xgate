@@ -11,30 +11,23 @@ import (
 	"sync"
 )
 
-// Native 是 fanout 自己跑 Xray 的后端，用在本机没装 3x-ui 的场合。
+// Native 是 fanout 自己跑 sing-box 的后端，用在本机没装 3x-ui 的场合。
 //
-// 入站数据存在 native.json，Xray 的运行配置每次改动后整份重新生成。
+// 入站数据存在 native.json，sing-box 的运行配置每次改动后整份重新生成。
 // 全量重写比增量改省心：配置是纯函数产物，不会出现改了一半的中间态。
 type Native struct {
 	mu            sync.Mutex
 	dir           string
 	store         *nativeStore
-	proc          *xrayProc
+	proc          *coreProc
 	appliedConfig []byte // guarded by mu; the configuration of the running core
 }
 
 func openNative(workDir string) (*Native, error) {
-	return openNativeCore(workDir, "xray")
-}
-
-func openNativeCore(workDir, core string) (*Native, error) {
 	if workDir == "" {
 		return nil, fmt.Errorf("自建模式缺少工作目录")
 	}
-	bin, err := findXray(workDir)
-	if core == "sing-box" {
-		bin, err = findSingBox(workDir)
-	}
+	bin, err := findSingBox(workDir)
 	if err != nil {
 		return nil, err
 	}
@@ -45,46 +38,29 @@ func openNativeCore(workDir, core string) (*Native, error) {
 	n := &Native{
 		dir:   workDir,
 		store: store,
-		proc:  &xrayProc{bin: bin, dir: workDir, core: core},
+		proc:  &coreProc{bin: bin, dir: workDir},
 	}
-	// 上次进程被强杀时遗留的 Xray 还占着入站端口，先收掉
+	// 上次进程被强杀时遗留的 sing-box 还占着入站端口，先收掉
 	n.proc.reapOrphan()
 	return n, nil
 }
 
 func (n *Native) Kind() string {
-	if n.proc.kind() == "sing-box" {
-		return "sing-box"
-	}
-	return "native"
+	return "sing-box"
 }
 
 func (n *Native) Describe() string {
-	return fmt.Sprintf("自建 %s（%s）", n.proc.kind(), n.proc.bin)
+	return fmt.Sprintf("自建 sing-box（%s）", n.proc.bin)
 }
 
-// apply 重新生成配置并重启 Xray，然后落盘。
+// apply 重新生成配置并重启 sing-box，然后落盘。
 // 调用方必须已持有 n.mu。
 func (n *Native) apply(tunnels []*Tunnel) error {
-	// 切核心时旧的 Hy2/TUIC 入站还在库里的话，Xray 配置生成器
-	// 会把它当成普通协议写出去，校验必然失败。提前报错比让
-	// apply 半路失败、还把用户其他入站也拖下水要清楚得多。
-	if n.proc.kind() != "sing-box" {
-		for _, ib := range n.store.sorted() {
-			if ib.Enable && isRelayProtocol(ib.Protocol) {
-				return fmt.Errorf("入站 %s 是 %s，只能在 sing-box 模式下运行，请先切回 sing-box 或删除该入站", ib.Remark, ib.Protocol)
-			}
-		}
+	cfg, err := buildSingBoxConfig(n.store.sorted(), tunnels)
+	if err != nil {
+		return err
 	}
-	cfg := buildXrayConfig(n.store.sorted(), tunnels)
-	if n.proc.kind() == "sing-box" {
-		var err error
-		cfg, err = buildSingBoxConfig(n.store.sorted(), tunnels)
-		if err != nil {
-			return err
-		}
-	}
-	path, err := writeXrayConfig(n.dir, cfg)
+	path, err := writeCoreConfig(n.dir, cfg)
 	if err != nil {
 		return err
 	}
@@ -149,7 +125,7 @@ func (n *Native) OnTunnelsChanged(tunnels []*Tunnel) error {
 	return n.apply(tunnels)
 }
 
-// Close 停掉自己拉起的 Xray。
+// Close 停掉自己拉起的 sing-box。
 func (n *Native) Close() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -486,7 +462,7 @@ func (n *Native) AddClient(id int, email string, tunnels []*Tunnel) error {
 }
 
 // DeleteClient 摘掉一个客户端。留下最后一个是有意的：
-// 没有任何客户端的入站在 Xray 里虽然合法，但谁也连不上，只会让人以为坏了。
+// 没有任何客户端的入站虽然合法，但谁也连不上，只会让人以为坏了。
 func (n *Native) DeleteClient(id int, email string, tunnels []*Tunnel) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -570,9 +546,8 @@ type NewInboundSpec struct {
 
 // nativeProtocols 是自建模式支持的协议，与前端下拉保持一致。
 // VMess 已移除：不在此列，建 VMess 会直接报不支持；升级后残留的
-// VMess 入站也不会再生成运行配置（见 buildXrayConfig/buildSingBoxConfig 的跳过逻辑）。
-// hysteria2/tuic 只有 sing-box 核心能跑，CreateInbound 里会再按核心把关，
-// Xray 核心、3x-ui、S-UI 下建它们都会直接报错而不是生成坏配置。
+// VMess 入站也不会再生成运行配置（见 buildSingBoxConfig 的跳过逻辑）。
+// Hysteria2/TUIC 是 sing-box 的串联输出协议（见 inbound_spec.go）。
 var nativeProtocols = map[string]bool{"vless": true, "trojan": true, "hysteria2": true, "tuic": true}
 
 // CreateInbound 新建一个入站，端口留空时随机分配。
@@ -585,11 +560,6 @@ func (n *Native) CreateInbound(spec NewInboundSpec, tunnels []*Tunnel) (*Created
 		return nil, err
 	}
 	proto, network, security, port := ns.Protocol, ns.Network, ns.Security, ns.Port
-	// Hysteria2/TUIC 不是 Xray 入站协议，Xray 核心下建站只会生成
-	// Xray 读不懂的配置，所以在这里就拦住，让用户切到 sing-box 模式。
-	if isRelayProtocol(proto) && n.proc.kind() != "sing-box" {
-		return nil, fmt.Errorf("%s 只能在自建 sing-box 模式下创建，当前核心是 %s", proto, n.proc.kind())
-	}
 
 	ib := &nativeInbound{
 		ID:       n.store.NextID,
@@ -611,13 +581,7 @@ func (n *Native) CreateInbound(spec NewInboundSpec, tunnels []*Tunnel) (*Created
 		}
 		ib.TLS = conf
 	case "reality":
-		var conf *realityConfig
-		var err error
-		if n.proc.kind() == "sing-box" {
-			conf, err = generatedReality(spec)
-		} else {
-			conf, err = buildReality(n.proc.bin, spec)
-		}
+		conf, err := generatedReality(spec)
 		if err != nil {
 			return nil, err
 		}
@@ -810,55 +774,4 @@ func buildTLS(dir string, spec NewInboundSpec) (*tlsConfig, error) {
 	}
 	conf.CertSha256 = fp
 	return conf, nil
-}
-
-// buildReality 组装 REALITY 配置，密钥和 shortId 都自动生成。
-// xrayBin 用来跑 `xray x25519` 生成密钥对。
-func buildReality(xrayBin string, spec NewInboundSpec) (*realityConfig, error) {
-	dest := strings.TrimSpace(spec.Dest)
-	if dest == "" {
-		// REALITY 要跟 dest 完成一次真实 TLS1.3 握手，dest 不稳会让所有连接
-		// 静默回落。microsoft.com 在部分机房握手经常走不完，这里选更可靠的。
-		dest = "www.tesla.com:443"
-	}
-	if !strings.Contains(dest, ":") {
-		dest += ":443"
-	}
-
-	var names []string
-	for _, s := range strings.Split(spec.ServerNames, ",") {
-		if s = strings.TrimSpace(s); s != "" {
-			names = append(names, s)
-		}
-	}
-	if len(names) == 0 {
-		// 默认用 dest 的主机名：REALITY 要求 SNI 与被借用的站点一致
-		names = []string{strings.SplitN(dest, ":", 2)[0]}
-	}
-
-	priv, pub, err := realityKeys(xrayBin)
-	if err != nil {
-		return nil, err
-	}
-	if err := checkRealityDest(dest, names[0]); err != nil {
-		return nil, fmt.Errorf("REALITY 目标站点不可用，换一个 dest: %w", err)
-	}
-
-	short := strings.TrimSpace(spec.ShortID)
-	if short == "" {
-		short = randomShortID()
-	}
-	fp := strings.TrimSpace(spec.Fingerprint)
-	if fp == "" {
-		fp = "chrome"
-	}
-
-	return &realityConfig{
-		Dest:        dest,
-		ServerNames: names,
-		PrivateKey:  priv,
-		PublicKey:   pub,
-		ShortIDs:    []string{short},
-		Fingerprint: fp,
-	}, nil
 }

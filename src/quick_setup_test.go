@@ -1,10 +1,12 @@
 package main
 
 import (
+	"crypto/ecdh"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -199,10 +201,10 @@ func TestQuickSetupRealityNeedsNoCertificate(t *testing.T) {
 	}
 }
 
-func TestQuickSetupWithOfficialXrayValidator(t *testing.T) {
-	bin := os.Getenv("MIKU_XRAY_TEST_BINARY")
+func TestQuickSetupWithOfficialSingBoxValidator(t *testing.T) {
+	bin := os.Getenv("MIKU_SINGBOX_TEST_BINARY")
 	if bin == "" {
-		t.Skip("set MIKU_XRAY_TEST_BINARY to validate both stacks with official Xray")
+		t.Skip("set MIKU_SINGBOX_TEST_BINARY to validate the generated config with official sing-box")
 	}
 	root := t.TempDir()
 	cert, key := signedQuickFixture(t, root)
@@ -215,21 +217,27 @@ func TestQuickSetupWithOfficialXrayValidator(t *testing.T) {
 		}
 		ib := &nativeInbound{ID: 1, Port: ns.Port, Protocol: ns.Protocol, Network: ns.Network, Security: ns.Security, Enable: true, Clients: []nativeClient{{ID: fixtureUUID, Email: "fixture", Flow: ns.Flow, Enable: true}}}
 		if domain == "" {
-			var private, public string
-			private, public, err = realityKeys(bin)
-			ib.Reality = &realityConfig{Dest: "www.tesla.com:443", ServerNames: []string{"www.tesla.com"}, PrivateKey: private, PublicKey: public, ShortIDs: []string{randomShortID()}, Fingerprint: "chrome"}
+			pair, err := ecdh.X25519().GenerateKey(rand.Reader)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ib.Reality = &realityConfig{Dest: "www.tesla.com:443", ServerNames: []string{"www.tesla.com"}, PrivateKey: base64.RawURLEncoding.EncodeToString(pair.Bytes()), PublicKey: base64.RawURLEncoding.EncodeToString(pair.PublicKey().Bytes()), ShortIDs: []string{randomShortID()}, Fingerprint: "chrome"}
 		} else {
 			ib.TLS, err = buildTLS(root, spec)
 		}
 		if err != nil {
 			t.Fatal(err)
 		}
-		path, err := writeXrayConfig(root, buildXrayConfig([]*nativeInbound{ib}, nil))
+		cfg, err := buildSingBoxConfig([]*nativeInbound{ib}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err = verifyXrayConfig(bin, path); err != nil {
-			t.Fatalf("official Xray rejected %s: %v", ns.Security, err)
+		path, err := writeCoreConfig(root, cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = (&coreProc{bin: bin}).verify(path); err != nil {
+			t.Fatalf("official sing-box rejected %s: %v", ns.Security, err)
 		}
 	}
 }
@@ -265,7 +273,7 @@ func TestQuickSetupValidatesAndDeduplicatesRequests(t *testing.T) {
 func TestQuickSetupCoreFailureCompletesEveryStep(t *testing.T) {
 	useSettings(t)
 	m := NewManager(0, t.TempDir())
-	n := &Native{dir: m.workDir, store: &nativeStore{}, proc: &xrayProc{bin: "/bin/false", dir: m.workDir, core: "xray"}}
+	n := &Native{dir: m.workDir, store: &nativeStore{}, proc: &coreProc{bin: "/bin/false", dir: m.workDir}}
 	usePanel(t, n)
 	job := quickFixtureJob(m)
 	m.runQuickSetup(job, nil, "")

@@ -19,7 +19,7 @@ func TestNormalizeInboundSpecDefaults(t *testing.T) {
 }
 
 func TestNormalizeInboundSpecGeneratesPath(t *testing.T) {
-	for _, net := range []string{"ws", "httpupgrade", "xhttp", "grpc"} {
+	for _, net := range []string{"ws", "httpupgrade", "grpc"} {
 		ns, err := normalizeInboundSpec(NewInboundSpec{Network: net, Port: 1234}, map[int]bool{})
 		if err != nil {
 			t.Fatalf("%s: %v", net, err)
@@ -38,6 +38,7 @@ func TestNormalizeInboundSpecRejects(t *testing.T) {
 	}{
 		{"未知协议", NewInboundSpec{Protocol: "ss", Port: 1}, nil},
 		{"未知传输", NewInboundSpec{Network: "quic", Port: 1}, nil},
+		{"XHTTP 已移除", NewInboundSpec{Network: "xhttp", Port: 1}, nil},
 		{"未知安全层", NewInboundSpec{Security: "xtls", Port: 1}, nil},
 		{"REALITY 配 ws", NewInboundSpec{Network: "ws", Security: "reality", Port: 1}, nil},
 		{"端口占用", NewInboundSpec{Port: 443}, map[int]bool{443: true}},

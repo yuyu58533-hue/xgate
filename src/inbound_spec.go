@@ -79,9 +79,8 @@ func normalizeInboundSpec(spec NewInboundSpec, used map[int]bool) (*normalizedSp
 			return nil, fmt.Errorf("xtls-rprx-vision 只能用于 VLESS + TCP + TLS/REALITY")
 		}
 	}
-	// REALITY 靠模仿 TLS 握手工作，套在 ws/grpc 这类已有自己头部的传输上没有意义，
-	// Xray 也不接受这种组合
-	if security == "reality" && network != "tcp" && network != "xhttp" && network != "grpc" {
+	// REALITY 靠模仿 TLS 握手工作，套在 ws 这类已有自己头部的传输上没有意义
+	if security == "reality" && network != "tcp" && network != "grpc" {
 		return nil, fmt.Errorf("REALITY 不支持 %s 传输", network)
 	}
 	// VMess 已移除，这里不再有 vmess+ws+tls 组合需要放行。
@@ -100,7 +99,7 @@ func normalizeInboundSpec(spec NewInboundSpec, used map[int]bool) (*normalizedSp
 	path := strings.TrimSpace(spec.Path)
 	if path == "" {
 		switch network {
-		case "ws", "httpupgrade", "xhttp":
+		case "ws", "httpupgrade":
 			path = "/" + randomHex(6)
 		case "grpc":
 			path = randomHex(6)

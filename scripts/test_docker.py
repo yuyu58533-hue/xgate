@@ -36,7 +36,7 @@ class DockerDataTests(unittest.TestCase):
         (self.lib / 'miku').write_bytes(b'\x7fELFfixture-service')
         (self.lib / 'miku').chmod(0o755)
         (self.seed / 'bin').mkdir(parents=True)
-        for name in ('xray', 'sing-box'):
+        for name in ('sing-box',):
             (self.seed / 'bin' / name).write_bytes(b'fixture-' + name.encode())
             (self.seed / 'bin' / name).chmod(0o755)
         patches = [patch.object(c, 'DATA', self.data), patch.object(c, 'LIB', self.lib),
@@ -51,14 +51,14 @@ class DockerDataTests(unittest.TestCase):
     def test_restart_keeps_credentials_tunnels_and_ui_port(self):
         args = d.initialize()
         self.assertEqual(args, [str(self.lib / 'miku'), '-dir', str(self.data), '-max', '0'])
-        names = ('password', 'basepath', 'bin/xray', 'bin/sing-box')
+        names = ('password', 'basepath', 'bin/sing-box')
         initial = {name: (self.data / name).read_bytes() for name in names}
         settings = c.settings()
         settings.update(port=19090, public_host='panel.example.com', sub_token='keep-me')
         c.write_json(self.data / 'settings.json', settings)
         c.atomic(self.data / 'state.json', b'{"tunnels":["keep-me"]}')
-        (self.data / 'bin/xray').write_bytes(b'custom-existing-core')
-        initial['bin/xray'] = b'custom-existing-core'
+        (self.data / 'bin/sing-box').write_bytes(b'custom-existing-core')
+        initial['bin/sing-box'] = b'custom-existing-core'
         d.initialize()
         self.assertEqual(c.settings(), settings)
         self.assertEqual((self.data / 'state.json').read_bytes(), b'{"tunnels":["keep-me"]}')
@@ -69,7 +69,7 @@ class DockerDataTests(unittest.TestCase):
     def test_restart_after_go_persisted_null_nodes_preserves_credentials(self):
         d.initialize()
         before={name:(self.data/name).read_bytes() for name in ('password','basepath','settings.json')}
-        for name,field in (('state.json','tunnels'),('native.json','inbounds'),('xray.json','inbounds')):
+        for name,field in (('state.json','tunnels'),('native.json','inbounds'),('sing-box.json','inbounds')):
             c.write_json(self.data/name,{field:None})
         d.initialize()
         self.assertEqual(before,{name:(self.data/name).read_bytes() for name in before})

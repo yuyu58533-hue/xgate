@@ -1,5 +1,13 @@
 # 更新记录
 
+## v0.3.0 — 自建核心只剩 sing-box
+
+- 移除自建 Xray 核心：不再下载、不再运行 Xray，一键配置直接走 sing-box；旧安装升级后自动切到 sing-box，已有 VLESS/Trojan/Hysteria2/TUIC 入站照常工作。
+- XHTTP 入站不再支持（sing-box 没有 XHTTP 传输），升级前请先删掉或改成 ws/grpc/tcp。
+- REALITY 密钥改由程序内生成，不再依赖 `xray x25519`；旧版迁移保留 REALITY 密钥时改用纯 Python 的 X25519 推导。
+- direct 出站保持强制 IPv4，避免隧道外 IPv6 泄漏；旧版 panel_mode 里写的 `native` 会自动按 sing-box 处理。
+- 3x-ui / S-UI 接管模式与 xray-cf-lite 模式不受影响。
+
 ## v0.2.6 — 前后端分离与自动端口
 
 - Docker 默认独立 Nginx 前端 + Go 后端，原生 / 仅后端保留内嵌页面。

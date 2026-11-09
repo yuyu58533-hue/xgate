@@ -1,20 +1,4 @@
 {
-  "xray-amd64": {
-    "repo": "XTLS/Xray-core",
-    "version": "v26.3.27",
-    "name": "Xray-linux-64.zip",
-    "sha256": "23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae",
-    "bytes": 21136402,
-    "member": "xray"
-  },
-  "xray-arm64": {
-    "repo": "XTLS/Xray-core",
-    "version": "v26.3.27",
-    "name": "Xray-linux-arm64-v8a.zip",
-    "sha256": "4d30283ae614e3057f730f67cd088a42be6fdf91f8639d82cb69e48cde80413c",
-    "bytes": 19716427,
-    "member": "xray"
-  },
   "sing-box-amd64": {
     "repo": "SagerNet/sing-box",
     "version": "v1.14.3",

@@ -45,7 +45,7 @@ class PortSelectionTests(unittest.TestCase):
     def test_null_saved_collections_are_empty_not_a_restart_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)
-            for name,field in (('state.json','tunnels'),('native.json','inbounds'),('xray.json','inbounds')):
+            for name,field in (('state.json','tunnels'),('native.json','inbounds'),('sing-box.json','inbounds')):
                 (root/name).write_text(json.dumps({field:None}),encoding='utf-8')
             with patch.object(c,'trusted',side_effect=lambda path,**kwargs:Path(path).read_bytes()):
                 self.assertEqual(c.reserved_ports(root,include_common=False),set())

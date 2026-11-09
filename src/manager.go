@@ -572,7 +572,7 @@ func (m *Manager) StopAll() {
 
 // SetCred 改一条出口的 SOCKS5 凭据。cred 两个字段都为空表示随机重置。
 //
-// 改完要通知后端：本机 Xray 的 socks 出站里带着这套凭据，
+// 改完要通知后端：本机 sing-box 的 socks 出站里带着这套凭据，
 // 不同步的话面板侧的节点会立刻连不上自己的出口。
 func (m *Manager) SetCred(slot int, cred SocksCred) (SocksCred, error) {
 	m.mu.RLock()
@@ -605,7 +605,7 @@ func (m *Manager) SetCred(slot int, cred SocksCred) (SocksCred, error) {
 //
 // 只为 3x-ui 模式而生：它的 OnTunnelsChanged 是空操作，重启不会重写面板出站，
 // 而从旧版本升上来时面板里持久化的 socks 出站没有认证字段，端口一旦要认证就连不上。
-// 自建模式恢复时每条隧道 up 都会重建配置，本就自洽，这里跳过免得多重启一次 Xray。
+// 自建模式恢复时每条隧道 up 都会重建配置，本就自洽，这里跳过免得多重启一次 sing-box。
 func (m *Manager) ReconcileOutbounds() {
 	p, err := openPanel()
 	if err != nil || p.Kind() != "3x-ui" {
@@ -706,7 +706,7 @@ func (m *Manager) resync(t *Tunnel) error {
 
 // notifyPanel 告诉后端隧道集合变了。
 //
-// 自建模式下出站是由隧道列表现算出来的，不通知的话新开的出口在 Xray 里
+// 自建模式下出站是由隧道列表现算出来的，不通知的话新开的出口在 sing-box 配置里
 // 没有对应的 socks 出站，绑定会指向一个不存在的 tag。接管 3x-ui 时是空操作。
 // 后端不可用不该让开关出口失败，所以只记日志。
 func (m *Manager) notifyPanel() {

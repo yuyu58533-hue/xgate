@@ -39,7 +39,7 @@ MIKU_GATE_REPO=你的用户名/你的仓库名 bash <(curl -fsSL https://raw.git
 
 - VPN Gate 节点列表镜像（GeorgeXie2333 等）：那是节点数据来源，
   不是 miku-gate 上游，改了会断节点来源。
-- Xray / sing-box 核心下载（CORE_ASSETS.json 里的 XTLS、SagerNet）：
+- sing-box 核心下载（CORE_ASSETS.json 里的 SagerNet）：
   那是协议核心本身，不是 miku-gate 上游。
 - README 里的赞助商、原项目致谢段落：属于署名，不是安装指向，
   留着原样；你要去掉赞助商段落时自行删那一段即可。
@@ -47,8 +47,10 @@ MIKU_GATE_REPO=你的用户名/你的仓库名 bash <(curl -fsSL https://raw.git
 
 ## 配套改动
 
+- Xray 已移除：自建核心只剩 sing-box，一键配置直接走 sing-box；
+  XHTTP 入站不再支持，升级前请先删掉或改成 ws/grpc/tcp。
 - VMess 已移除：原生入站不再接受 VMess，界面下拉里没有 VMess，
   `vmess://` 导入和订阅转换都会报错；升级后残留的 VMess 入站
   不再生成运行配置、不再输出分享链接，需要在面板里删掉。
-- Hysteria2 / TUIC：见 `docs/RELAY_HY2_TUIC.md`，只在自建 sing-box
-  模式下创建，未绑出口默认走 `127.0.0.1:8500`，绑了出口走该隧道。
+- Hysteria2 / TUIC：见 `docs/RELAY_HY2_TUIC.md`，自建核心只有 sing-box，
+  未绑出口默认走 `127.0.0.1:8500`，绑了出口走该隧道。

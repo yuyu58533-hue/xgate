@@ -124,12 +124,12 @@ class MaintenanceTests(unittest.TestCase):
 
     def test_core_downloads_can_progress_in_parallel(self):
         import threading
-        barrier=threading.Barrier(2);seen=[]
+        barrier=threading.Barrier(1);seen=[]
         def download(core,architecture):
             seen.append(core);barrier.wait(timeout=2)
         with patch.object(c,'arch',return_value='amd64'),patch.object(c,'core_download',side_effect=download),contextlib.redirect_stdout(io.StringIO()):
             c.ensure_cores()
-        self.assertEqual(set(seen),{'xray','sing-box'})
+        self.assertEqual(set(seen),{'sing-box'})
 
     def test_backup_contains_quick_command_for_version_rollback(self):
         import tarfile

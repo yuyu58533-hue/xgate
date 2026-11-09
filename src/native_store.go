@@ -20,7 +20,7 @@ type nativeClient struct {
 	Password string `json:"password"` // trojan 用密码
 	Enable   bool   `json:"enable"`
 	// Flow 只对 VLESS 有意义，取值 "" 或 xtls-rprx-vision。
-	// Vision 要求底层是 TCP + TLS/REALITY，其他组合下 Xray 会直接拒绝启动。
+	// Vision 要求底层是 TCP + TLS/REALITY，其他组合下 sing-box 会直接拒绝启动。
 	Flow string `json:"flow,omitempty"`
 }
 
@@ -72,7 +72,7 @@ type realityConfig struct {
 	Fingerprint string   `json:"fingerprint"` // 客户端指纹，如 chrome
 }
 
-// tag 复原这个入站在 Xray 里的 inboundTag，格式与 3x-ui 保持一致。
+// tag 是这个入站的固定标识，格式与 3x-ui 保持一致。
 func (n *nativeInbound) tag() string {
 	return fmt.Sprintf("in-%d-%s", n.Port, n.netOrTCP())
 }

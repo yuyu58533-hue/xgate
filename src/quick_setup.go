@@ -77,7 +77,7 @@ func apiQuickSetup(m *Manager, domains *DomainRegistry) http.HandlerFunc {
 			writeJSON(w, 202, map[string]any{"job": id, "existing": true})
 			return
 		}
-		labels := []string{"准备 Xray", "域名与证书", "更新节点来源", "准备入口模板"}
+		labels := []string{"准备 sing-box", "域名与证书", "更新节点来源", "准备入口模板"}
 		for _, region := range quickRegions {
 			for i := 1; i <= region.Count; i++ {
 				labels = append(labels, fmt.Sprintf("%s %d", region.Name, i))
@@ -126,11 +126,11 @@ func apiQuickSetupStop(m *Manager) http.HandlerFunc {
 	}
 }
 
-func (m *Manager) quickNative() (*Native, error) {
+func (m *Manager) quickSingBox() (*Native, error) {
 	previous := currentPanelMode()
 	panel, err := openPanel()
-	if err != nil || panel.Kind() != "native" {
-		panel, err = switchPanelMode("native")
+	if err != nil || panel.Kind() != "sing-box" {
+		panel, err = switchPanelMode("sing-box")
 	}
 	if err == nil {
 		err = panel.OnTunnelsChanged(m.Tunnels())
@@ -139,18 +139,18 @@ func (m *Manager) quickNative() (*Native, error) {
 		if restored, restoreErr := switchPanelMode(previous); restoreErr == nil {
 			_ = restored.OnTunnelsChanged(m.Tunnels())
 		}
-		return nil, fmt.Errorf("Xray 暂未启动成功，已尝试恢复原核心：%w", err)
+		return nil, fmt.Errorf("sing-box 暂未启动成功，已尝试恢复原核心：%w", err)
 	}
 	native, ok := panel.(*Native)
 	if !ok {
-		return nil, fmt.Errorf("当前核心不是自建 Xray，请稍后再试。")
+		return nil, fmt.Errorf("当前核心不是自建 sing-box，请稍后再试。")
 	}
 	panelState.mu.Lock()
-	panelState.forced = "native"
+	panelState.forced = "sing-box"
 	workDir := panelState.workDir
 	panelState.mu.Unlock()
-	if err := savePanelMode(workDir, "native"); err != nil {
-		return nil, fmt.Errorf("保存 Xray 选择失败：%w", err)
+	if err := savePanelMode(workDir, "sing-box"); err != nil {
+		return nil, fmt.Errorf("保存 sing-box 选择失败：%w", err)
 	}
 	invalidateInbounds()
 	return native, nil
@@ -321,8 +321,8 @@ func (m *Manager) runQuickSetupContext(ctx context.Context, job *Job, domains *D
 		job.Set(step, "failed", firstLine(err.Error()))
 		job.failUnfinished("前一步暂未完成，请处理提示后再试。")
 	}
-	job.Set(0, "running", "正在准备 Xray 核心…")
-	native, err := m.quickNative()
+	job.Set(0, "running", "正在准备 sing-box 核心…")
+	native, err := m.quickSingBox()
 	if err != nil {
 		fail(0, err)
 		return
@@ -330,7 +330,7 @@ func (m *Manager) runQuickSetupContext(ctx context.Context, job *Job, domains *D
 	if canceled() {
 		return
 	}
-	job.Set(0, "ok", "Xray 已就绪")
+	job.Set(0, "ok", "sing-box 已就绪")
 	var cert RegisteredDomain
 	if domain == "" {
 		job.Set(1, "ok", "使用 Reality，无需域名和证书")

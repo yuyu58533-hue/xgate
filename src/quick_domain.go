@@ -51,7 +51,7 @@ func (n *Native) reconfigureQuickTemplate(spec NewInboundSpec, tunnels []*Tunnel
 	if spec.Security == "tls" {
 		tls, err = buildTLS(n.dir, spec)
 	} else {
-		reality, err = buildReality(n.proc.bin, spec)
+		reality, err = generatedReality(spec)
 	}
 	if err != nil {
 		return 0, false, err

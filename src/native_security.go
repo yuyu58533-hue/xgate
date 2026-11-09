@@ -10,8 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
-	"strings"
 	"time"
 )
 
@@ -37,28 +35,6 @@ func checkRealityDest(dest, serverName string) error {
 	return nil
 }
 
-// realityKeys 调用 xray 生成一对 X25519 密钥。
-//
-// 不同版本的输出措辞不一样：新版是 "Password (PublicKey):"，
-// 老版是 "Public key:"，所以两种都认。
-func realityKeys(bin string) (priv, pub string, err error) {
-	out, err := exec.Command(bin, "x25519").Output()
-	if err != nil {
-		return "", "", fmt.Errorf("生成 REALITY 密钥失败: %w", err)
-	}
-	text := string(out)
-
-	rePriv := regexp.MustCompile(`(?i)private\s*key:\s*(\S+)`)
-	rePub := regexp.MustCompile(`(?i)(?:password\s*\(publickey\)|public\s*key):\s*(\S+)`)
-
-	mp := rePriv.FindStringSubmatch(text)
-	mb := rePub.FindStringSubmatch(text)
-	if mp == nil || mb == nil {
-		return "", "", fmt.Errorf("无法解析 xray x25519 输出: %s", strings.TrimSpace(text))
-	}
-	return mp[1], mb[1], nil
-}
-
 // randomShortID 生成 REALITY 的 shortId。
 // 长度必须是偶数且不超过 16 个十六进制字符。
 func randomShortID() string {
@@ -71,7 +47,7 @@ func randomShortID() string {
 
 // selfSignedCert 生成一张自签证书，用于没有真实域名时也能开 TLS。
 //
-// 走 openssl 而不是 Go 的 crypto/x509：证书要落成 Xray 能读的 PEM 文件，
+// 走 openssl 而不是 Go 的 crypto/x509：证书要落成 PEM 文件，
 // openssl 一条命令就够，省掉一大段编解码代码。
 func selfSignedCert(dir, serverName string) (certFile, keyFile string, err error) {
 	certDir := filepath.Join(dir, "certs")
@@ -111,14 +87,14 @@ func certFingerprint(certFile string) (string, error) {
 // 支持的取值。集中在这里，前后端校验共用一份。
 var (
 	// udp 只对 Hysteria2/TUIC 有意义（见 inbound_spec.go 的串联校验），
-	// VLESS/Trojan 仍走 tcp/ws/grpc/httpupgrade/xhttp。
-	nativeNetworks   = map[string]bool{"tcp": true, "ws": true, "grpc": true, "httpupgrade": true, "xhttp": true, "udp": true}
+	// VLESS/Trojan 仍走 tcp/ws/grpc/httpupgrade。
+	nativeNetworks   = map[string]bool{"tcp": true, "ws": true, "grpc": true, "httpupgrade": true, "udp": true}
 	nativeSecurities = map[string]bool{"none": true, "tls": true, "reality": true}
 )
 
 // visionCapable 判断能不能用 xtls-rprx-vision。
 //
-// Vision 只在 VLESS + 裸 TCP + TLS/REALITY 下有效，其他组合 Xray 会拒绝启动。
+// Vision 只在 VLESS + 裸 TCP + TLS/REALITY 下有效，其他组合 sing-box 不接受。
 func visionCapable(protocol, network, security string) bool {
 	return protocol == "vless" && network == "tcp" && (security == "tls" || security == "reality")
 }

@@ -127,7 +127,7 @@ def _install(directory,update=False,reinstall=False):
                 path=c.LIB/name
                 if path.exists():c.trusted(path);path.unlink()
             if not any(c.LIB.iterdir()):c.LIB.rmdir()
-            for name in ('xray','sing-box'):
+            for name in ('sing-box',):
                 path=c.DATA/'bin'/name
                 if path.exists():c.trusted(path);path.unlink()
             if (c.DATA/'bin').exists() and not any((c.DATA/'bin').iterdir()):(c.DATA/'bin').rmdir()
@@ -144,7 +144,7 @@ def _install(directory,update=False,reinstall=False):
             preferred=os.environ.get('WEB_PORT')
             value={'port':c.choose_port(int(preferred) if preferred else None),'listen_addr':'','public_ip':c.public_ip(),'residential_only':False}
             c.write_json(c.DATA/'settings.json',value)
-            c.atomic(c.DATA/'panel_mode',b'native\n')
+            c.atomic(c.DATA/'panel_mode',b'sing-box\n')
         value=c.settings();old_port=value['port']
         value['port']=c.choose_port(old_port)
         if value['port']!=old_port:

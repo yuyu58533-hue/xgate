@@ -148,7 +148,7 @@ def ensure_cores(old=None):
         else:print('准备官方 '+core,flush=True);core_download(core,architecture)
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=2) as workers:
-        list(workers.map(prepare,('xray','sing-box')))
+        list(workers.map(prepare,('sing-box',)))
 
 def port_available(port):
     if not 1<=port<=65535:return False
@@ -173,7 +173,7 @@ def reserved_ports(data=None,include_common=True):
             clean=re.sub(r'\x1b\[[0-9;]*m','',result.stdout.decode(errors='replace'))
             ports.update(int(p) for p in re.findall(r'(?m)^port:[^\S\r\n]*(\d+)',clean))
         except (OSError,RuntimeError,subprocess.TimeoutExpired):pass
-    for path,field in ((data/'native.json','inbounds'),(data/'xray.json','inbounds'),(data/'state.json','tunnels'),(Path('/usr/local/x-ui/bin/config.json'),'inbounds')):
+    for path,field in ((data/'native.json','inbounds'),(data/'sing-box.json','inbounds'),(data/'xray.json','inbounds'),(data/'state.json','tunnels'),(Path('/usr/local/x-ui/bin/config.json'),'inbounds')):
         if not path.exists():continue
         try:
             value=json.loads(trusted(path,max_bytes=8<<20))
@@ -327,6 +327,45 @@ def old_maintenance():
     spec=importlib.util.spec_from_file_location('legacy_miku_maintenance','/usr/local/lib/miku-gate/miku-maintain.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     return module,old
 
+def x25519_public_key(private_b64):
+    """从 base64url 编码的 X25519 私钥推导公钥（RFC 7748 蒙哥马利阶梯）。"""
+    raw = base64.urlsafe_b64decode(private_b64 + '=' * (-len(private_b64) % 4))
+    require(len(raw) == 32, 'REALITY 私钥长度无效')
+    p = 2 ** 255 - 19
+    a24 = 121665
+    k = bytearray(raw)
+    k[0] &= 248
+    k[31] &= 127
+    k[31] |= 64
+    x1 = 9
+    x2, z2, x3, z3, swap = 1, 0, x1, 1, 0
+    for t in range(254, -1, -1):
+        bit = (k[t >> 3] >> (t & 7)) & 1
+        swap ^= bit
+        if swap:
+            x2, x3 = x3, x2
+            z2, z3 = z3, z2
+        swap = bit
+        a = (x2 + z2) % p
+        aa = a * a % p
+        b = (x2 - z2) % p
+        bb = b * b % p
+        e = (aa - bb) % p
+        c = (x3 + z3) % p
+        d = (x3 - z3) % p
+        da = d * a % p
+        cb = c * b % p
+        x3 = (da + cb) ** 2 % p
+        z3 = x1 * (da - cb) ** 2 % p
+        x2 = aa * bb % p
+        z2 = e * (aa + a24 * e) % p
+    if swap:
+        x2, x3 = x3, x2
+        z2, z3 = z3, z2
+    public = (x2 * pow(z2, p - 2, p) % p).to_bytes(32, 'little')
+    return base64.urlsafe_b64encode(public).decode().rstrip('=')
+
+
 def import_legacy(packet):
     lands=packet.get('landings',[]);by_exit={v['exit']['id']:v for v in lands};tunnels=[]
     for slot,v in enumerate(lands):
@@ -346,11 +385,11 @@ def import_legacy(packet):
             landing=by_exit.get(node['legacy_exit_id']);bound=tag(landing['node']['hostname']) if landing else 'legacy-unconfigured-'+tag(node['legacy_exit_id'])
         ib={'id':index,'port':request['port'],'protocol':protocol,'network':'tcp','path':'','host':'','security':security,'remark':node['name'],'enable':True,'clients':clients,'bound_to':bound}
         if security=='reality':
-            private=identity['reality_private_key'];pub=run([DATA/'bin'/'xray','x25519','-i',private]).stdout.decode();match=re.search(r'(?i)(?:password\s*\(publickey\)|public\s*key):\s*(\S+)',pub);require(match,'无法保留原REALITY密钥')
-            ib['reality']={'dest':request['reality_hostname']+':443','server_names':[request['server_name']],'private_key':private,'public_key':match.group(1),'short_ids':[identity['short_id']],'fingerprint':'chrome'}
+            private=identity['reality_private_key'];pub=x25519_public_key(private)
+            ib['reality']={'dest':request['reality_hostname']+':443','server_names':[request['server_name']],'private_key':private,'public_key':pub,'short_ids':[identity['short_id']],'fingerprint':'chrome'}
         else:
             cert=DATA/'certs'/('legacy-'+str(index)+'.pem');key=DATA/'certs'/('legacy-'+str(index)+'.key');atomic(cert,base64.b64decode(material['certificate_pem']));atomic(key,base64.b64decode(material['private_key_pem']));ib['tls']={'server_name':request['server_name'],'cert_file':str(cert),'key_file':str(key),'self_signed':False}
         inbounds.append(ib)
     if inbounds:
-        write_json(DATA/'native.json',{'next_id':len(inbounds)+1,'inbounds':inbounds});core=packet['nodes'][0]['material']['request']['core'];atomic(DATA/'panel_mode',('sing-box' if core=='sing-box' else 'native').encode())
+        write_json(DATA/'native.json',{'next_id':len(inbounds)+1,'inbounds':inbounds});atomic(DATA/'panel_mode',b'sing-box\n')
     print('已导入入口 '+str(len(inbounds))+' 个、已配置VPN落地 '+str(len(tunnels))+' 个；未配置/特殊上游记录 '+str(packet.get('skipped',0))+' 个保留在旧版备份。')

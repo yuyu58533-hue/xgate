@@ -23,7 +23,7 @@ func main() {
 		maxSlots = flag.Int("max", 0, "可选隧道数量限制；0不设置软件上限")
 		workDir  = flag.String("dir", "/var/lib/miku", "工作目录")
 	)
-	panelMode := flag.String("panel", "", "节点链接后端: 留空按界面设置/自动探测, 3x-ui, s-ui, native, sing-box, xray-cf-lite")
+	panelMode := flag.String("panel", "", "节点链接后端: 留空按界面设置/自动探测, 3x-ui, s-ui, sing-box, xray-cf-lite")
 	publicIP := flag.String("ip", "", "母机公网 IPv4，用于分享链接/SOCKS5 地址；留空则自动探测")
 	showVersion := flag.Bool("version", false, "显示版本后退出")
 	flag.Parse()
@@ -554,7 +554,7 @@ func apiJobDismiss(m *Manager) http.HandlerFunc {
 	}
 }
 
-// apiXUIStatus 报告当前的节点链接后端：接管的 3x-ui，或 fanout 自己跑的 Xray。
+// apiXUIStatus 报告当前的节点链接后端：接管的 3x-ui，或 fanout 自己跑的 sing-box。
 func apiXUIStatus(w http.ResponseWriter, r *http.Request) {
 	p, err := openPanel()
 	if err != nil {

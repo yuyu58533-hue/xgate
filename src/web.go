@@ -622,10 +622,10 @@ $('#heroSubBtn').onclick=()=>$('#subBtn').click();
 
 // 自建模式下入站由 fanout 自己管，界面要提供新建入口；
 // 接管 3x-ui 时入站归面板管，这里只读不写。
-function isNative(){ return view.backend === 'native' || view.backend === 'sing-box'; }
+function isNative(){ return view.backend === 'sing-box'; }
 // xray-cf-lite 模式下节点归它管，fanout 只改路由，界面不给新建入口
 function isXCL(){ return view.backend === 'xray-cf-lite'; }
-const BACKEND_NAME = {'native':'自建 Xray', 'sing-box':'自建 sing-box', 's-ui':'S-UI', '3x-ui':'3x-ui', 'xray-cf-lite':'xray-cf-lite'};
+const BACKEND_NAME = {'sing-box':'自建 sing-box', 's-ui':'S-UI', '3x-ui':'3x-ui', 'xray-cf-lite':'xray-cf-lite'};
 function backendName(){ return BACKEND_NAME[view.backend] || '3x-ui'; }
 
 const STATUS = {up:'已连通', starting:'连接中', failed:'失败', stopped:'已停止'};
@@ -1143,7 +1143,7 @@ async function openDetail(id){
   }
 }
 
-// 出口下拉：列出所有已连通的隧道，外加"直连"。绑定按 Xray 的 inboundTag 走。
+// 出口下拉：列出所有已连通的隧道，外加"直连"。绑定按入站 tag 走。
 function exitOptions(currentHost){
   const up = orderedExits().filter(e => e.status === 'up');
   return '<option value=""' + (currentHost ? '' : ' selected') + '>直连（不走隧道）</option>'

@@ -11,10 +11,10 @@ import (
 
 // Panel 是 fanout 管理节点链接的后端。
 //
-// 有两个实现：接管本机 3x-ui 面板的 XUI，以及 fanout 自己跑 Xray 的 Native。
+// 有两个实现：接管本机 3x-ui 面板的 XUI，以及 fanout 自己跑 sing-box 的 Native。
 // 界面和编排层只依赖这个接口，两种模式下的操作语义完全一致。
 type Panel interface {
-	// Kind 返回 "3x-ui" 或 "native"，界面据此提示当前模式。
+	// Kind 返回 "3x-ui"、"s-ui"、"sing-box" 或 "xray-cf-lite"，界面据此提示当前模式。
 	Kind() string
 	// Describe 给出一行人能读的后端说明。
 	Describe() string
@@ -30,7 +30,7 @@ type Panel interface {
 	CloneToTunnels(templateID int, hosts []string, tunnels []*Tunnel) ([]int, error)
 	DeleteInbounds(ids []int, tunnels []*Tunnel) error
 
-	// CreateInbound 新建一个入站。自建模式写自己的库并重建 Xray 配置，
+	// CreateInbound 新建一个入站。自建模式写自己的库并重建 sing-box 配置，
 	// 接管 3x-ui 时走面板的 inbounds/add API，让面板照常管这条入站。
 	CreateInbound(spec NewInboundSpec, tunnels []*Tunnel) (*CreatedInbound, error)
 
@@ -48,10 +48,10 @@ type Panel interface {
 	//
 	// 自建模式的出站完全由隧道列表推导，新开的出口必须重建配置才有对应出站；
 	// 接管 3x-ui 时出站在 Bind/Clone 里顺带同步，这里是空操作，
-	// 免得每开一条隧道就白重启一次面板的 Xray。
+	// 免得每开一条隧道就白重启一次面板的核心。
 	OnTunnelsChanged(tunnels []*Tunnel) error
 
-	// Close 释放后端占用的资源。自建模式要停掉自己拉起的 Xray，
+	// Close 释放后端占用的资源。自建模式要停掉自己拉起的 sing-box，
 	// 否则 fanout 退出后它会变成孤儿进程，下次启动撞端口。
 	Close()
 }
@@ -106,6 +106,10 @@ func configurePanel(workDir, mode string) {
 			mode = strings.TrimSpace(string(blob))
 		}
 	}
+	// "native" 是旧版写法，等价于 sing-box。
+	if mode == "native" {
+		mode = "sing-box"
+	}
 	panelState.forced = mode
 	panelState.current = nil
 }
@@ -128,7 +132,7 @@ func savePanelMode(dir, mode string) error {
 // openPanel 返回当前可用的后端。
 //
 // 优先接管本机已装的 3x-ui：用户既然装了面板，入站大概率在那边管着，
-// fanout 另起一个 Xray 会和面板抢端口。探测不到才用自建模式。
+// fanout 另起一个核心会和面板抢端口。探测不到才用自建模式。
 func openPanel() (Panel, error) {
 	panelState.mu.Lock()
 	defer panelState.mu.Unlock()
@@ -145,15 +149,10 @@ func openPanel() (Panel, error) {
 		}
 		panelState.current = x
 		return x, nil
-	case "native":
+	case "native", "sing-box":
+		// "native" 是旧版 panel_mode 的写法，自建核心如今只有 sing-box，
+		// 留着当别名，老安装升级后不用改配置。
 		n, err := openNative(panelState.workDir)
-		if err != nil {
-			return nil, err
-		}
-		panelState.current = n
-		return n, nil
-	case "sing-box":
-		n, err := openNativeCore(panelState.workDir, "sing-box")
 		if err != nil {
 			return nil, err
 		}
@@ -234,8 +233,7 @@ func availablePanelModes(workDir string) []map[string]any {
 	modes = append(modes, map[string]any{"mode": "3x-ui", "label": "3x-ui 面板", "available": xuiOK, "reason": xuiReason})
 	modes = append(modes, map[string]any{"mode": "s-ui", "label": "S-UI 面板", "available": suiInstalled(), "reason": "需要本机S-UI；选择时自动读取本机API令牌"})
 
-	// 自建模式总是可用（fanout 自己跑 Xray），前提是能找到 xray 二进制，这里不预判，交给切换时报错。
-	modes = append(modes, map[string]any{"mode": "native", "label": "自建 Xray", "available": true, "reason": ""})
+	// 自建模式总是可用（fanout 自己跑 sing-box），前提是能找到 sing-box 二进制，这里不预判，交给切换时报错。
 	_, singErr := findSingBox(workDir)
 	singReason := ""
 	if singErr != nil {
@@ -251,8 +249,12 @@ func availablePanelModes(workDir string) []map[string]any {
 // 先关掉旧后端释放资源，再按新模式探测；探测失败时回滚到自动模式，
 // 避免把 fanout 卡在一个连不上的后端上。
 func switchPanelMode(mode string) (Panel, error) {
+	// "native" 是旧版写法，等价于 sing-box。
+	if mode == "native" {
+		mode = "sing-box"
+	}
 	switch mode {
-	case "", "3x-ui", "s-ui", "native", "sing-box", "xray-cf-lite":
+	case "", "3x-ui", "s-ui", "sing-box", "xray-cf-lite":
 	default:
 		return nil, fmt.Errorf("未知后端模式 %q", mode)
 	}

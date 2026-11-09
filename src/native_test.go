@@ -22,7 +22,7 @@ func TestNativeInboundTagMatchesXUIFormat(t *testing.T) {
 	}
 }
 
-func TestBuildXrayConfigBindsOnlyLiveTunnels(t *testing.T) {
+func TestBuildSingBoxConfigBindsOnlyLiveTunnels(t *testing.T) {
 	up := &Tunnel{Port: 1080, Status: "up", Node: Node{HostName: "jp1"}}
 	down := &Tunnel{Port: 1081, Status: "failed", Node: Node{HostName: "jp2"}}
 	inbounds := []*nativeInbound{
@@ -31,7 +31,10 @@ func TestBuildXrayConfigBindsOnlyLiveTunnels(t *testing.T) {
 		{ID: 3, Port: 300, Protocol: "vless", Enable: true},
 	}
 
-	cfg := buildXrayConfig(inbounds, []*Tunnel{up, down})
+	cfg, err := buildSingBoxConfig(inbounds, []*Tunnel{up, down})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	outs := map[string]bool{}
 	for _, o := range cfg["outbounds"].([]any) {
@@ -44,29 +47,31 @@ func TestBuildXrayConfigBindsOnlyLiveTunnels(t *testing.T) {
 		t.Error("未连通的隧道不该生成出站")
 	}
 
-	rules := cfg["routing"].(map[string]any)["rules"].([]any)
+	rules := cfg["route"].(map[string]any)["rules"].([]any)
 	if len(rules) != 2 {
 		t.Fatalf("连通出口路由与失联出口阻断规则均须保留，实际 %d 条", len(rules))
 	}
-	if got := rules[0].(map[string]any)["outboundTag"]; got != "miku-jp1" {
-		t.Errorf("outboundTag = %v, want miku-jp1", got)
+	if got := rules[0].(map[string]any)["outbound"]; got != "miku-jp1" {
+		t.Errorf("outbound = %v, want miku-jp1", got)
 	}
-	if got := rules[1].(map[string]any)["outboundTag"]; got != "block" {
+	if got := rules[1].(map[string]any)["action"]; got != "reject" {
 		t.Errorf("失联出口不能改走直连: %v", got)
 	}
 }
 
-func TestBuildXrayConfigForcesIPv4OnDirect(t *testing.T) {
+func TestBuildSingBoxConfigForcesIPv4OnDirect(t *testing.T) {
 	// 隧道内没有 IPv6，direct 走 IPv6 会暴露母机真实地址
-	cfg := buildXrayConfig(nil, nil)
+	cfg, err := buildSingBoxConfig(nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, o := range cfg["outbounds"].([]any) {
 		m := o.(map[string]any)
 		if m["tag"] != "direct" {
 			continue
 		}
-		s := m["settings"].(map[string]any)
-		if s["domainStrategy"] != "UseIPv4" {
-			t.Errorf("direct 出站应强制 IPv4，实际 %v", s["domainStrategy"])
+		if m["domain_strategy"] != "ipv4_only" {
+			t.Errorf("direct 出站应强制 IPv4，实际 %v", m["domain_strategy"])
 		}
 		return
 	}

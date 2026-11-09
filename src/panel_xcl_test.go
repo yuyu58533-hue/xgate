@@ -257,8 +257,8 @@ func TestConfigurePanelReadsSavedMode(t *testing.T) {
 	}
 
 	// 命令行显式指定时优先级更高
-	configurePanel(dir, "native")
-	if got := currentPanelMode(); got != "native" {
+	configurePanel(dir, "sing-box")
+	if got := currentPanelMode(); got != "sing-box" {
 		t.Fatalf("-panel 应压过盘上的记录，实际 %q", got)
 	}
 

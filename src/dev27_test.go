@@ -75,7 +75,7 @@ func TestStoppedBindingsStayOutOfEntranceAreaWhileSharedExitRemains(t *testing.T
 	}}
 	panelState.mu.Lock()
 	previous := panelState.current
-	panelState.current = &Native{store: store, proc: &xrayProc{core: "xray"}}
+	panelState.current = &Native{store: store, proc: &coreProc{}}
 	panelState.mu.Unlock()
 	invalidateInbounds()
 	t.Cleanup(func() {

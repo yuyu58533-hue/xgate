@@ -60,9 +60,9 @@ func validateCred(c SocksCred) error {
 	return nil
 }
 
-// socksServerJSON 生成 Xray socks 出站里的 server 条目。
+// socksServerJSON 生成 sing-box socks 出站里的 server 条目。
 //
-// 两种后端共用：本机 Xray 连的是 fanout 自己的 SOCKS5 端口，
+// 两种后端共用：本机 sing-box 连的是 fanout 自己的 SOCKS5 端口，
 // 端口既然要认证，出站配置就必须带上同一套凭据。
 func socksServerJSON(t *Tunnel) map[string]any {
 	cred := t.credential()

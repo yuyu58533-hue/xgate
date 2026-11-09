@@ -13,13 +13,13 @@
         --或--> 绑定的 miku-gate 隧道 SOCKS（入站绑了具体出口时）
 ```
 
-miku-gate 原生没有 Hysteria2/TUIC 服务端，Xray 入站也没有这两个协议，
-所以这两个协议**只能在自建 sing-box 模式下创建**。在 Xray、3x-ui、
-S-UI 模式下创建会直接报错，不会生成一份跑不起来的配置。
+自建核心就是 sing-box，Hysteria2/TUIC 是 sing-box 的串联输出协议，
+直接在自建模式下创建。在 3x-ui、S-UI 模式下创建会直接报错，
+不会生成一份跑不起来的配置。
 
 ## 怎么建
 
-1. 面板模式切到“自建 sing-box”（不是 Xray，不是 3x-ui/S-UI）。
+1. 面板模式就是“自建 sing-box”（不是 3x-ui/S-UI）。
 2. 新建节点，协议选 Hysteria2 或 TUIC。
    - 传输自动锁死 UDP，安全自动锁死 TLS，不能改成 ws/grpc/REALITY/none。
    - TLS 域名与证书走和 VLESS 一样的流程：优先用已绑定域名证书，

@@ -19,7 +19,7 @@ VPN Gate 不属于 Miku Gate。节点数量、国家、在线时间随时变化�
 <p align="center"><img src="src/assets/miku-hero-v1.png" alt="Miku Gate 插画" width="260"></p>
 <h2 align="center">世界，等你连接。</h2>
 
-**代码版本：v0.2.6**，正式状态以 [Releases](https://github.com/yuyu58533-hue/xgate/releases/latest) 为准。支持 Linux amd64 / arm64；完整安装包已编译，VPS 无需安装 Go。
+**代码版本：v0.3.0**，正式状态以 [Releases](https://github.com/yuyu58533-hue/xgate/releases/latest) 为准。支持 Linux amd64 / arm64；完整安装包已编译，VPS 无需安装 Go。
 
 ## 先选一种安装方式，不要把下面的命令全部执行
 
@@ -260,8 +260,8 @@ bash install-docker.sh backend info
 **在哪里做：另一台前端服务器 B，不是 VPS A。** 按“方式二第 1 步”准备 Linux Docker/Compose 和 Python 3.10+；B 不需要 TUN、Go、后端程序或后端私钥。在 B 上上传前端专用包和 SHA256SUMS，进入这两个文件所在目录后运行：
 
 ```bash
-grep '  miku-gate-frontend-v0.2.6.tar.gz$' SHA256SUMS | sha256sum -c -
-tar --no-same-owner -xzf miku-gate-frontend-v0.2.6.tar.gz
+grep '  miku-gate-frontend-v0.3.0.tar.gz$' SHA256SUMS | sha256sum -c -
+tar --no-same-owner -xzf miku-gate-frontend-v0.3.0.tar.gz
 cd miku-gate
 cp -n .env.example .env
 ```
@@ -332,14 +332,14 @@ python3 -B scripts/frontend.py restart
 
 ### 第 1 步：在本地下载，再上传到 VPS
 
-从 [v0.2.6 Release](https://github.com/yuyu58533-hue/xgate/releases/tag/v0.2.6) 下载文件和 `SHA256SUMS`。该版本尚未发布时不要使用不存在的下载地址；可先使用你已经拿到的完整安装包，或等待正式发布。
+从 [v0.3.0 Release](https://github.com/yuyu58533-hue/xgate/releases/tag/v0.3.0) 下载文件和 `SHA256SUMS`。该版本尚未发布时不要使用不存在的下载地址；可先使用你已经拿到的完整安装包，或等待正式发布。
 
 | 文件 | 用途 |
 | --- | --- |
 | `miku` | 单个自解压安装文件，含两种架构程序 |
-| `miku-gate-vps-v0.2.6.tar.gz` | VPS 完整安装包，含后端、独立前端、部署脚本 |
-| `miku-gate-v0.2.6.zip` | 完整源码和两种架构的安装程序 |
-| `miku-gate-frontend-v0.2.6.tar.gz` | 只有前端部署文件，给另一台前端服务器用 |
+| `miku-gate-vps-v0.3.0.tar.gz` | VPS 完整安装包，含后端、独立前端、部署脚本 |
+| `miku-gate-v0.3.0.zip` | 完整源码和两种架构的安装程序 |
+| `miku-gate-frontend-v0.3.0.tar.gz` | 只有前端部署文件，给另一台前端服务器用 |
 | `install-online.sh` | 正式在线安装器，可先下载审阅 |
 | `SHA256SUMS` | 上述文件的校验值 |
 
@@ -359,8 +359,8 @@ bash miku --verify
 使用 VPS tar.gz：
 
 ```bash
-grep '  miku-gate-vps-v0.2.6.tar.gz$' SHA256SUMS | sha256sum -c -
-tar --no-same-owner -xzf miku-gate-vps-v0.2.6.tar.gz
+grep '  miku-gate-vps-v0.3.0.tar.gz$' SHA256SUMS | sha256sum -c -
+tar --no-same-owner -xzf miku-gate-vps-v0.3.0.tar.gz
 cd miku-gate
 ```
 
@@ -411,6 +411,13 @@ miku info
 Windows 本地静态检查不等于 Linux 容器、真实 VPN Gate 隧道或证书签发验收。完整细节见 [前后端分离指南](docs/FRONTEND.md)、[Docker 指南](docs/DOCKER.md)、[连接策略](docs/CONNECTION_POLICY.md)、[变更记录](CHANGELOG.md) 与 [验证记录](docs/VALIDATION.md)。
 
 国旗许可证见 [FLAG_ICONS_LICENSE](FLAG_ICONS_LICENSE)，插画与字标见 [ARTWORK.md](ARTWORK.md)。项目不代表与角色权利人存在官方合作或背书。
+
+## v0.3.0 变化
+
+- 自建核心只剩 sing-box：不再下载、不再运行 Xray，一键配置直接走 sing-box；原来 Xray 模式的安装升级后自动切到 sing-box，已有 VLESS/Trojan/Hysteria2/TUIC 入站照常工作。
+- XHTTP 入站不再支持（sing-box 没有 XHTTP 传输），升级前请先删掉或改成 ws/grpc/tcp。
+- REALITY 密钥改由程序内生成，不再依赖 `xray x25519`；direct 出站保持强制 IPv4，避免隧道外 IPv6 泄漏。
+- 旧版 panel_mode 里写的 `native` 会自动按 sing-box 处理，不用手动改配置。
 
 ## v0.2.6 变化
 

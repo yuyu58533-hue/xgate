@@ -151,7 +151,7 @@ func TestImportConfirmationIsAtomicPersistentAndDeduplicated(t *testing.T) {
 	webSettingsMu.Lock()
 	webSettingsCur.PublicHost = "198.51.100.8"
 	webSettingsMu.Unlock()
-	usePanel(t, &Native{store: &nativeStore{Inbounds: []*nativeInbound{{ID: 1, Port: 443, Protocol: "vless", Enable: true, Security: "tls", TLS: &tlsConfig{ServerName: "example.com"}, Clients: []nativeClient{{ID: fixtureUUID, Enable: true}}}}}, proc: &xrayProc{core: "xray"}})
+	usePanel(t, &Native{store: &nativeStore{Inbounds: []*nativeInbound{{ID: 1, Port: 443, Protocol: "vless", Enable: true, Security: "tls", TLS: &tlsConfig{ServerName: "example.com"}, Clients: []nativeClient{{ID: fixtureUUID, Enable: true}}}}}, proc: &coreProc{}})
 	m := NewManager(0, t.TempDir())
 	link := "vless://" + fixtureUUID + "@198.51.100.8:443?security=tls&sni=example.com#One"
 	added, items, err := m.importLinks(link+"\n"+strings.Replace(link, "#One", "#Another", 1), "")
@@ -174,7 +174,7 @@ func TestImportConfirmationIsAtomicPersistentAndDeduplicated(t *testing.T) {
 func TestNativeSubscriptionFiltersClientsAndDoesNotDuplicateSharedEntry(t *testing.T) {
 	useSettings(t)
 	clients := []nativeClient{{ID: fixtureUUID, Email: "jp", Enable: true, BoundTo: "jp"}, {ID: "different", Email: "kr", Enable: true, BoundTo: "offline"}, {ID: "disabled", Enable: false, BoundTo: "jp"}}
-	panel := &Native{store: &nativeStore{Inbounds: []*nativeInbound{{ID: 1, Port: 30001, Protocol: "vless", Enable: true, Clients: clients}}}, proc: &xrayProc{core: "xray"}}
+	panel := &Native{store: &nativeStore{Inbounds: []*nativeInbound{{ID: 1, Port: 30001, Protocol: "vless", Enable: true, Clients: clients}}}, proc: &coreProc{}}
 	usePanel(t, panel)
 	m := NewManager(0, t.TempDir())
 	m.tunnels[1] = &Tunnel{Slot: 1, Status: "up", Node: Node{HostName: "jp"}}

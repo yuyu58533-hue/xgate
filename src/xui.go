@@ -1572,11 +1572,7 @@ func (x *XUI) CreateInbound(spec NewInboundSpec, tunnels []*Tunnel) (*CreatedInb
 		}
 		ib.TLS = conf
 	case "reality":
-		bin, err := findXray(x.workDir)
-		if err != nil {
-			return nil, fmt.Errorf("REALITY 需要 xray 生成密钥: %w", err)
-		}
-		conf, err := buildReality(bin, spec)
+		conf, err := generatedReality(spec)
 		if err != nil {
 			return nil, err
 		}
@@ -1642,4 +1638,77 @@ func xuiStreamSettings(ib *nativeInbound) map[string]any {
 		}
 	}
 	return stream
+}
+
+// streamSettingsJSON 生成 Xray 格式的传输层配置：网络类型 + 安全层。
+//
+// 只给 3x-ui 接管模式用：面板自己的 Xray 读这份 streamSettings，
+// 自建 sing-box 模式不用它（见 buildSingBoxConfig）。
+func streamSettingsJSON(ib *nativeInbound) map[string]any {
+	network := ib.netOrTCP()
+	stream := map[string]any{"network": network, "security": ib.securityOrNone()}
+
+	path := ib.Path
+	if path == "" {
+		path = "/"
+	}
+	switch network {
+	case "ws":
+		ws := map[string]any{"path": path}
+		if ib.Host != "" {
+			ws["host"] = ib.Host
+		}
+		stream["wsSettings"] = ws
+	case "httpupgrade":
+		hu := map[string]any{"path": path}
+		if ib.Host != "" {
+			hu["host"] = ib.Host
+		}
+		stream["httpupgradeSettings"] = hu
+	case "xhttp":
+		xh := map[string]any{"path": path, "mode": "auto"}
+		if ib.Host != "" {
+			xh["host"] = ib.Host
+		}
+		stream["xhttpSettings"] = xh
+	case "grpc":
+		// gRPC 没有 path，用 serviceName 区分；沿用 Path 字段少一个概念
+		name := strings.TrimPrefix(ib.Path, "/")
+		stream["grpcSettings"] = map[string]any{"serviceName": name}
+	}
+
+	switch ib.securityOrNone() {
+	case "tls":
+		if ib.TLS != nil {
+			t := map[string]any{
+				"certificates": []any{map[string]any{
+					"certificateFile": ib.TLS.CertFile,
+					"keyFile":         ib.TLS.KeyFile,
+				}},
+			}
+			if ib.TLS.ServerName != "" {
+				t["serverName"] = ib.TLS.ServerName
+			}
+			stream["tlsSettings"] = t
+		}
+	case "reality":
+		if ib.Reality != nil {
+			r := map[string]any{
+				"dest":        ib.Reality.Dest,
+				"serverNames": toAnySlice(ib.Reality.ServerNames),
+				"privateKey":  ib.Reality.PrivateKey,
+				"shortIds":    toAnySlice(ib.Reality.ShortIDs),
+			}
+			stream["realitySettings"] = r
+		}
+	}
+	return stream
+}
+
+func toAnySlice(in []string) []any {
+	out := make([]any, 0, len(in))
+	for _, s := range in {
+		out = append(out, s)
+	}
+	return out
 }

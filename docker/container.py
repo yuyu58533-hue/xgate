@@ -74,7 +74,7 @@ def initialize():
         except (OSError, ValueError, RuntimeError):
             print('公网 IPv4 自动检测失败；可在 .env 设置 MIKU_PUBLIC_IP 后重建容器。', flush=True)
     c.private_dir(c.DATA / 'bin')
-    for core in ('xray', 'sing-box'):
+    for core in ('sing-box',):
         target = c.DATA / 'bin' / core
         if target.exists():
             c.trusted(target, 0o755)
@@ -87,7 +87,7 @@ def initialize():
         else:
             c.atomic(path, (secrets.token_hex(size) + '\n').encode())
     if not (c.DATA / 'panel_mode').exists():
-        c.atomic(c.DATA / 'panel_mode', b'native\n')
+        c.atomic(c.DATA / 'panel_mode', b'sing-box\n')
     if not exists or value != c.settings():
         c.write_json(c.DATA / 'settings.json', value)
     binary = c.trusted(c.LIB / 'miku', 0o755)

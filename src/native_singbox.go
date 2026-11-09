@@ -5,12 +5,15 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 )
 
 func findSingBox(dir string) (string, error) {
@@ -37,7 +40,9 @@ func base64KeyPublic(private string) (string, error) {
 func generatedReality(spec NewInboundSpec) (*realityConfig, error) {
 	dest := strings.TrimSpace(spec.Dest)
 	if dest == "" {
-		dest = "www.microsoft.com:443"
+		// REALITY 要跟 dest 完成一次真实 TLS1.3 握手，dest 不稳会让所有连接
+		// 静默回落。microsoft.com 在部分机房握手经常走不完，这里选更可靠的。
+		dest = "www.tesla.com:443"
 	}
 	host, _, err := net.SplitHostPort(dest)
 	if err != nil {
@@ -104,7 +109,9 @@ func relayUpstream() (host string, port int, user, pass string) {
 
 func buildSingBoxConfig(inbounds []*nativeInbound, tunnels []*Tunnel) (map[string]any, error) {
 	live := map[string]bool{}
-	outs := []any{map[string]any{"type": "direct", "tag": "direct"}}
+	// direct 强制 IPv4：隧道内没有 IPv6，母机有全局 IPv6 时
+	// 没匹配上规则的流量会从 IPv6 出去，暴露服务器真实地址。
+	outs := []any{map[string]any{"type": "direct", "tag": "direct", "domain_strategy": "ipv4_only"}}
 	for _, tunnel := range tunnels {
 		if tunnel.Status != "up" {
 			continue
@@ -195,7 +202,7 @@ func buildSingBoxConfig(inbounds []*nativeInbound, tunnels []*Tunnel) (map[strin
 			continue
 		}
 		if ib.netOrTCP() == "xhttp" {
-			return nil, fmt.Errorf("节点 %s 使用XHTTP，请选择Xray核心；sing-box不支持此传输", ib.Remark)
+			return nil, fmt.Errorf("节点 %s 使用 XHTTP，sing-box 不支持此传输，请改用 ws/grpc/tcp", ib.Remark)
 		}
 		in := map[string]any{"type": ib.Protocol, "tag": ib.tag(), "listen": "0.0.0.0", "listen_port": ib.Port}
 		users := []any{}
@@ -261,20 +268,144 @@ func buildSingBoxConfig(inbounds []*nativeInbound, tunnels []*Tunnel) (map[strin
 	return map[string]any{"log": map[string]any{"level": "warn"}, "inbounds": ins, "outbounds": outs, "route": map[string]any{"rules": rules, "final": "direct"}}, nil
 }
 
-func (p *xrayProc) kind() string {
-	if p.core == "sing-box" {
-		return "sing-box"
-	}
-	return "xray"
+func (p *coreProc) kind() string {
+	return "sing-box"
 }
 
-func (p *xrayProc) verify(path string) error {
-	if p.kind() != "sing-box" {
-		return verifyXrayConfig(p.bin, path)
-	}
+func (p *coreProc) verify(path string) error {
 	output, err := cmdCombined(exec.Command(p.bin, "check", "-c", path))
 	if err != nil {
 		return fmt.Errorf("sing-box配置校验失败: %s", trimOutput(output))
 	}
 	return nil
+}
+
+// writeCoreConfig 把配置写到磁盘，返回配置路径。
+func writeCoreConfig(dir string, cfg map[string]any) (string, error) {
+	blob, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, "sing-box.json")
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, blob, 0600); err != nil {
+		return "", err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func trimOutput(b []byte) string {
+	s := string(b)
+	if len(s) > 400 {
+		s = s[:400] + "..."
+	}
+	return s
+}
+
+// coreProc 管理自建模式下的 sing-box 进程。
+type coreProc struct {
+	bin  string
+	dir  string
+	cmd  *exec.Cmd
+	logf *os.File
+	done <-chan struct{} // closed by Wait; never read ProcessState concurrently
+}
+
+func (p *coreProc) running() bool {
+	if p.cmd == nil || p.cmd.Process == nil || p.done == nil {
+		return false
+	}
+	select {
+	case <-p.done:
+		return false
+	default:
+		return true
+	}
+}
+
+// restart 用当前配置重启 sing-box。配置已在调用前写好并校验过。
+func (p *coreProc) restart(cfgPath string) error {
+	p.stop()
+
+	logPath := filepath.Join(p.dir, p.kind()+".log")
+	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	if err != nil {
+		return fmt.Errorf("打开 sing-box 日志失败: %w", err)
+	}
+
+	cmd := exec.Command(p.bin, "run", "-c", cfgPath)
+	cmd.Stdout = f
+	cmd.Stderr = f
+	// 必须从母机的网络命名空间拉起：直接 Start 有概率把 sing-box 拉进某条隧道，
+	// 那样入站端口只在隧道内部监听，母机上看不到，客户端全连不上
+	// 而进程、配置、日志三处都显示正常（见 netnsguard.go）
+	if err := cmdStart(cmd); err != nil {
+		f.Close()
+		return fmt.Errorf("启动 sing-box 失败: %w", err)
+	}
+	p.cmd, p.logf = cmd, f
+	exited := make(chan error, 1)
+	done := make(chan struct{})
+	p.done = done
+	go func() {
+		err := cmd.Wait()
+		close(done)
+		exited <- err
+	}()
+	p.writePID(cmd.Process.Pid)
+
+	// 起得来但立刻退出的情况要能被发现，否则界面会显示成功而实际不通
+	select {
+	case <-exited:
+		return fmt.Errorf("sing-box 启动后立刻退出，详见 %s", logPath)
+	case <-time.After(400 * time.Millisecond):
+	}
+	return nil
+}
+
+func (p *coreProc) stop() {
+	if p.cmd != nil && p.cmd.Process != nil {
+		_ = p.cmd.Process.Kill()
+		p.cmd = nil
+	}
+	if p.logf != nil {
+		p.logf.Close()
+		p.logf = nil
+	}
+	_ = os.Remove(p.pidPath())
+}
+
+func (p *coreProc) pidPath() string { return filepath.Join(p.dir, p.kind()+".pid") }
+
+func (p *coreProc) writePID(pid int) {
+	_ = os.WriteFile(p.pidPath(), []byte(strconv.Itoa(pid)), 0600)
+}
+
+// reapOrphan 清掉上次遗留的 sing-box。
+//
+// fanout 被 SIGKILL 时来不及停子进程，遗留的 sing-box 仍占着入站端口，
+// 下次启动会因端口冲突起不来。这里按 pidfile 精确定位，
+// 并核对可执行文件确实是我们启动的那个，避免误杀同名进程。
+func (p *coreProc) reapOrphan() {
+	blob, err := os.ReadFile(p.pidPath())
+	if err != nil {
+		return
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(blob)))
+	if err != nil || pid <= 1 {
+		_ = os.Remove(p.pidPath())
+		return
+	}
+	// pid 会被系统回收给别的进程，只有确认可执行文件一致才动手
+	if exe, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid)); err == nil {
+		if exe == p.bin {
+			if proc, err := os.FindProcess(pid); err == nil {
+				_ = proc.Kill()
+			}
+		}
+	}
+	_ = os.Remove(p.pidPath())
 }

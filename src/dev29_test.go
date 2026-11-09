@@ -23,7 +23,7 @@ func localLinkFixture(t *testing.T) (*Manager, *Native, *nativeInbound) {
 	publicIPMu.Unlock()
 	t.Cleanup(func() { setPublicIPOverride(previous) })
 	ib := &nativeInbound{ID: 1, Port: 30001, Protocol: "vless", Enable: true, BoundTo: "jp", Clients: []nativeClient{{ID: fixtureUUID, Email: "jp-user", Enable: true}}}
-	n := &Native{store: &nativeStore{NextID: 2, Inbounds: []*nativeInbound{ib}}, proc: &xrayProc{core: "xray"}}
+	n := &Native{store: &nativeStore{NextID: 2, Inbounds: []*nativeInbound{ib}}, proc: &coreProc{}}
 	usePanel(t, n)
 	m := NewManager(0, t.TempDir())
 	m.tunnels[1] = &Tunnel{Slot: 1, Order: 1, Status: "up", Port: 31001, ExitIP: "203.0.113.7", Node: Node{HostName: "jp", CountryCode: "JP"}, Cred: SocksCred{User: "u@local", Pass: "p:local"}}
