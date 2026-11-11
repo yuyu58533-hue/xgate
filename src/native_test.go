@@ -255,3 +255,37 @@ func TestShareLinkCarriesSecurityParams(t *testing.T) {
 		t.Errorf("自签 TLS 链接要带证书指纹: %s", tl)
 	}
 }
+
+// Hy2 链接要和 v2ray-agent 等生成的一致：显式 alpn=h3，
+// 自签时 sni + insecure=1 + 证书指纹；正式证书只带 sni + alpn。
+func TestShareLinkHysteria2(t *testing.T) {
+	c := nativeClient{ID: "uuid-1", Password: "pw-1", Email: "e", Enable: true}
+
+	hy := shareLink(&nativeInbound{
+		Port: 24560, Protocol: "hysteria2", Remark: "h2",
+		TLS: &tlsConfig{ServerName: "localhost", SelfSigned: true, CertSha256: "AABB"},
+	}, c, "1.2.3.4")
+	if !strings.HasPrefix(hy, "hysteria2://pw-1@1.2.3.4:24560?") {
+		t.Errorf("hysteria2 链接格式不对: %s", hy)
+	}
+	for _, want := range []string{"sni=localhost", "insecure=1", "pinSHA256=AABB", "alpn=h3"} {
+		if !strings.Contains(hy, want) {
+			t.Errorf("自签 Hy2 链接缺少 %s: %s", want, hy)
+		}
+	}
+
+	hy2 := shareLink(&nativeInbound{
+		Port: 24560, Protocol: "hysteria2", Remark: "h2",
+		TLS: &tlsConfig{ServerName: "example.com", SelfSigned: false},
+	}, c, "1.2.3.4")
+	for _, want := range []string{"sni=example.com", "alpn=h3"} {
+		if !strings.Contains(hy2, want) {
+			t.Errorf("正式证书 Hy2 链接缺少 %s: %s", want, hy2)
+		}
+	}
+	for _, notWant := range []string{"insecure=1", "pinSHA256="} {
+		if strings.Contains(hy2, notWant) {
+			t.Errorf("正式证书 Hy2 链接不应带 %s: %s", notWant, hy2)
+		}
+	}
+}

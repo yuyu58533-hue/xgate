@@ -1,5 +1,9 @@
 # 更新记录
 
+## v0.3.2 — Hy2 分享链接补齐参数
+
+- Hysteria2 分享链接现在显式带 `alpn=h3`，自签证书时再带 `pinSHA256`（自签证书的指纹早就算好了，以前只给了 VLESS/Trojan，没给 Hy2）。新版 V2RayN + sing-box 1.14 下自签 Hy2 节点容易握手失败，v2ray-agent 生成的链接就是这个写法；正式证书的链接只带 sni + alpn，不带 insecure 和指纹。
+
 ## v0.3.1 — 修复 sing-box 配置校验失败
 
 - v0.3.0 给 direct 出站加的 `domain_strategy: ipv4_only` 是旧写法，sing-box 1.12 已废弃、1.14 已移除，导致 `sing-box check` 直接报错、配置无法应用。改用官方迁移方案：`domain_resolver` + 一个 local DNS 服务器，direct 出站照常强制 IPv4。已用真实 sing-box 1.14.3 校验通过。

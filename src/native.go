@@ -691,13 +691,21 @@ func shareLink(ib *nativeInbound, c nativeClient, host string) string {
 	// 下面这两种固定格式认。自签证书时用 insecure/allow_insecure=1，
 	// 否则客户端会因为验不过自签证书而直接拒绝连接；有正式证书时
 	// 只带 sni，让客户端正常验签。
+	// Hy2 另外显式带 alpn=h3（QUIC 握手只认 h3，v2ray-agent 等
+	// 生成的链接都带它），自签时再带 pinSHA256：指纹是自签证书
+	// 唯一能让客户端验过的凭据，支持 pin 的客户端可以固定信任
+	// 这一张（sing-box 会忽略它，仍走 insecure）。
 	if ib.Protocol == "hysteria2" {
 		hq := url.Values{}
+		hq.Set("alpn", "h3")
 		if ib.TLS != nil && ib.TLS.ServerName != "" {
 			hq.Set("sni", ib.TLS.ServerName)
 		}
 		if ib.TLS != nil && ib.TLS.SelfSigned {
 			hq.Set("insecure", "1")
+			if ib.TLS.CertSha256 != "" {
+				hq.Set("pinSHA256", ib.TLS.CertSha256)
+			}
 		}
 		return fmt.Sprintf("hysteria2://%s@%s:%d?%s#%s", url.User(c.Password).String(), addressHost, ib.Port, hq.Encode(), frag)
 	}

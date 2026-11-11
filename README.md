@@ -19,7 +19,7 @@ VPN Gate 不属于 Miku Gate。节点数量、国家、在线时间随时变化�
 <p align="center"><img src="src/assets/miku-hero-v1.png" alt="Miku Gate 插画" width="260"></p>
 <h2 align="center">世界，等你连接。</h2>
 
-**代码版本：v0.3.1**，正式状态以 [Releases](https://github.com/yuyu58533-hue/xgate/releases/latest) 为准。支持 Linux amd64 / arm64；完整安装包已编译，VPS 无需安装 Go。
+**代码版本：v0.3.2**，正式状态以 [Releases](https://github.com/yuyu58533-hue/xgate/releases/latest) 为准。支持 Linux amd64 / arm64；完整安装包已编译，VPS 无需安装 Go。
 
 ## 先选一种安装方式，不要把下面的命令全部执行
 
@@ -260,8 +260,8 @@ bash install-docker.sh backend info
 **在哪里做：另一台前端服务器 B，不是 VPS A。** 按“方式二第 1 步”准备 Linux Docker/Compose 和 Python 3.10+；B 不需要 TUN、Go、后端程序或后端私钥。在 B 上上传前端专用包和 SHA256SUMS，进入这两个文件所在目录后运行：
 
 ```bash
-grep '  miku-gate-frontend-v0.3.1.tar.gz$' SHA256SUMS | sha256sum -c -
-tar --no-same-owner -xzf miku-gate-frontend-v0.3.1.tar.gz
+grep '  miku-gate-frontend-v0.3.2.tar.gz$' SHA256SUMS | sha256sum -c -
+tar --no-same-owner -xzf miku-gate-frontend-v0.3.2.tar.gz
 cd miku-gate
 cp -n .env.example .env
 ```
@@ -332,14 +332,14 @@ python3 -B scripts/frontend.py restart
 
 ### 第 1 步：在本地下载，再上传到 VPS
 
-从 [v0.3.1 Release](https://github.com/yuyu58533-hue/xgate/releases/tag/v0.3.1) 下载文件和 `SHA256SUMS`。该版本尚未发布时不要使用不存在的下载地址；可先使用你已经拿到的完整安装包，或等待正式发布。
+从 [v0.3.2 Release](https://github.com/yuyu58533-hue/xgate/releases/tag/v0.3.2) 下载文件和 `SHA256SUMS`。该版本尚未发布时不要使用不存在的下载地址；可先使用你已经拿到的完整安装包，或等待正式发布。
 
 | 文件 | 用途 |
 | --- | --- |
 | `miku` | 单个自解压安装文件，含两种架构程序 |
-| `miku-gate-vps-v0.3.1.tar.gz` | VPS 完整安装包，含后端、独立前端、部署脚本 |
-| `miku-gate-v0.3.1.zip` | 完整源码和两种架构的安装程序 |
-| `miku-gate-frontend-v0.3.1.tar.gz` | 只有前端部署文件，给另一台前端服务器用 |
+| `miku-gate-vps-v0.3.2.tar.gz` | VPS 完整安装包，含后端、独立前端、部署脚本 |
+| `miku-gate-v0.3.2.zip` | 完整源码和两种架构的安装程序 |
+| `miku-gate-frontend-v0.3.2.tar.gz` | 只有前端部署文件，给另一台前端服务器用 |
 | `install-online.sh` | 正式在线安装器，可先下载审阅 |
 | `SHA256SUMS` | 上述文件的校验值 |
 
@@ -359,8 +359,8 @@ bash miku --verify
 使用 VPS tar.gz：
 
 ```bash
-grep '  miku-gate-vps-v0.3.1.tar.gz$' SHA256SUMS | sha256sum -c -
-tar --no-same-owner -xzf miku-gate-vps-v0.3.1.tar.gz
+grep '  miku-gate-vps-v0.3.2.tar.gz$' SHA256SUMS | sha256sum -c -
+tar --no-same-owner -xzf miku-gate-vps-v0.3.2.tar.gz
 cd miku-gate
 ```
 
@@ -411,6 +411,10 @@ miku info
 Windows 本地静态检查不等于 Linux 容器、真实 VPN Gate 隧道或证书签发验收。完整细节见 [前后端分离指南](docs/FRONTEND.md)、[Docker 指南](docs/DOCKER.md)、[连接策略](docs/CONNECTION_POLICY.md)、[变更记录](CHANGELOG.md) 与 [验证记录](docs/VALIDATION.md)。
 
 国旗许可证见 [FLAG_ICONS_LICENSE](FLAG_ICONS_LICENSE)，插画与字标见 [ARTWORK.md](ARTWORK.md)。项目不代表与角色权利人存在官方合作或背书。
+
+## v0.3.2 变化
+
+- Hy2 分享链接补齐参数：显式带 `alpn=h3`，自签证书时再带 `pinSHA256`（指纹早就算好了，以前只给了 VLESS/Trojan，没给 Hy2）。新版 V2RayN + sing-box 1.14 下自签 Hy2 节点容易握手失败，v2ray-agent 生成的链接就是这个写法。
 
 ## v0.3.1 变化
 

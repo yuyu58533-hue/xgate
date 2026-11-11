@@ -26,7 +26,7 @@ def source_file(path):
             and not (path.name.startswith('.env') and path.name!='.env.example'))
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--version',default='0.3.1');parser.add_argument('--label',default='v0.3.1');parser.add_argument('--output',type=Path,default=ROOT/'dist');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--version',default='0.3.2');parser.add_argument('--label',default='v0.3.2');parser.add_argument('--output',type=Path,default=ROOT/'dist');args=parser.parse_args()
     if not re.fullmatch(r'[A-Za-z0-9_.-]+',args.version) or not re.fullmatch(r'[A-Za-z0-9_.-]+',args.label):raise ValueError('invalid version/label')
     args.output=args.output.resolve()
     args.output.mkdir(parents=True,exist_ok=True)

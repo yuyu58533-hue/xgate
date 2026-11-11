@@ -1,6 +1,6 @@
-## Miku Gate v0.3.1 — 修复 sing-box 配置校验失败
+## Miku Gate v0.3.2 — Hy2 分享链接补齐参数
 
-v0.3.0 给 direct 出站加的 `domain_strategy: ipv4_only` 是旧写法，sing-box 1.12 已废弃、1.14 已移除，导致 `sing-box check` 直接报错、配置无法应用。已按官方迁移方案改为 `domain_resolver` + local DNS 服务器，direct 出站照常强制 IPv4；已用真实 sing-box 1.14.3 校验通过。
+Hysteria2 分享链接现在显式带 `alpn=h3`，自签证书时再带 `pinSHA256`（自签证书的指纹早就算好了，以前只给了 VLESS/Trojan，没给 Hy2）。新版 V2RayN + sing-box 1.14 下自签 Hy2 节点容易握手失败，v2ray-agent 生成的链接就是这个写法；正式证书的链接只带 sni + alpn。
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/yuyu58533-hue/xgate/main/mikugate.sh)
@@ -17,7 +17,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/yuyu58533-hue/xgate/main/mik
 - frontend start/restart/stop/info/check 独立维护，停前端不停止后端；顶层 stop/down 操作两端。
 - 同源登录/API/订阅代理，随机路径与 Origin 保护；远程 HTTPS 后端验证证书。
 - 前端专用包可部署到另一台 Linux 服务器，无需后端 TUN、Go、程序或私钥。
-- 保留缓存优化和 quick/sub；二进制全部从源码重建为 0.3.1。
+- 保留缓存优化和 quick/sub；二进制全部从源码重建为 0.3.2。
 
 附件为 `miku`、完整 VPS 包、完整源码 ZIP、前端专用包、install-online.sh、SHA256SUMS，共六项。
 
